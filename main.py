@@ -7,12 +7,46 @@ from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = 1000000000
 
-MOSAIC_DIR = r"C:\Path\To\Sub-Images"
+def exitWithEnter():
+  input("Press enter to quit the program")
+  exit(0)
+
+if not os.path.exists("settings.json"):
+  print("settings.json DOES NOT EXIST, A DEFAULT ONE WILL BE CREATED! PLEASE ENTER INFORMATION THERE!")
+  with open("settings.json", "w") as f:
+    obj = {
+      "image_path": "C:/Path/To/Image",
+      "sub_image_dir": "C:/Path/To/Sub-Images"
+    }
+    json.dump(obj, f)
+  exitWithEnter()
+
+with open("settings.json", "r") as f:
+  settings = json.load(f)
+  impath = settings.get("image_path")
+  mosaic_dir = settings.get("sub_image_dir")
+  if impath is None or mosaic_dir is None:
+    print("image_path or sub_image_dir DOES NOT EXIST IN THE SETTINGS FILE! PLEASE MODIFY THIS FILE SO IT CONTAINS BOTH!")
+    exitWithEnter()
+  elif not os.path.exists(impath):
+    print("Image {} does not exist!".format(impath))
+    exitWithEnter()
+  elif os.path.isdir(impath):
+    print("Input image path cannot be a directory!")
+    exitWithEnter()
+  elif not os.path.exists(mosaic_dir):
+    print("Sub-image directory {} does not exist!".format(mosaic_dir))
+    exitWithEnter()
+  elif not os.path.isdir(mosaic_dir):
+    print("Sub-image path {} does not point to a directory!".format(mosaic_dir))
+    exitWithEnter()
+
+MOSAIC_DIR = settings["sub_image_dir"]
 
 MOS_SIZE_X = 4
 MOS_SIZE_Y = 4
 
-MMOD = 8
+MMOD = 4
 
 files = glob.glob(MOSAIC_DIR + '/**/*.png', recursive=True)
 files_jpg = glob.glob(MOSAIC_DIR + '/**/*.jpg', recursive=True)
@@ -32,10 +66,11 @@ class NumpyArrayEncoder(json.JSONEncoder):
       return super(NumpyArrayEncoder, self).default(obj)
 
 class MosaicCreator():
-  def __init__(self, image):
+  def __init__(self, image, filename):
     self.colorDict = dict()
     self.runtimeDict = dict()
     self.image = image
+    self.filename = filename
 
 
     if os.path.exists("export_{}.json".format(MOS_SIZE_X*MMOD)):
@@ -67,7 +102,8 @@ class MosaicCreator():
         self.colorDict = self.runtimeDict
       except:
         print("FATAL: Could not write json file.")
-        exit(0)
+        exitWithEnter()
+        return
       print("Data exported!")
     
     print("Data loaded, running on image!")
@@ -83,6 +119,7 @@ class MosaicCreator():
         labIm = temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr')
         temp.close()
       except:
+        print(f"Could not open image with path {file}")
         continue
 
       bw, cb, cr = labIm.split()
@@ -135,6 +172,7 @@ class MosaicCreator():
               # Save numpy array to colorDict so we don't have to read image twice
               self.colorDict[imColor] = ic
             except:
+              print(f"Could not open image with path {ic}")
               continue
           y_c, x_c = np.where(np.all(ic != (-1, -1, -1), axis=-1))
           imArray[y_c + (y*MOS_SIZE_Y*MMOD), x_c + (x*MOS_SIZE_X*MMOD)] = ic[y_c, x_c]
@@ -159,6 +197,7 @@ class MosaicCreator():
               ic = np.asarray(temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr'))
               temp.close()
             except:
+              print(f"Could not open image with path {ic}")
               continue
 
           # Add this colour to the dictionary so we don't have to run calculations again for this colour
@@ -171,8 +210,9 @@ class MosaicCreator():
     # Finish progress bar
     self.printProgressBar(l, l, prefix="Creating image:", suffix="Complete", length=50)
     
-    print("Saving image as IM_{}_{}.png".format(MMOD, MMOD*MOS_SIZE_X))
-    Image.fromarray(imArray, mode="YCbCr").convert("RGB").save("IM_{}_{}.png".format(MMOD, MMOD*MOS_SIZE_X))
+    name = os.path.splitext(self.filename)
+    print("Saving image as {}_{}_{}.png".format(name[0], MMOD, MMOD*MOS_SIZE_X))
+    Image.fromarray(imArray, mode="YCbCr").convert("RGB").save("{}_{}_{}.png".format(name[0], MMOD, MMOD*MOS_SIZE_X))
 
   # Return the median colour as an int tuple
   def get_mean_color(self, bw, cb, cr):
@@ -210,9 +250,10 @@ class MosaicCreator():
 
 
 if __name__ == "__main__":
-  IMPATH = r"C:\Path\To\Image.png|jpg"
+  IMPATH = settings["image_path"]
+  filename = os.path.basename(IMPATH)
   t = Image.open(IMPATH) 
   im = t.convert('YCbCr')
   t.close()
 
-  creator = MosaicCreator(im)
+  creator = MosaicCreator(im, filename)
