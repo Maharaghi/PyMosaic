@@ -16,7 +16,9 @@ if not os.path.exists("settings.json"):
   with open("settings.json", "w") as f:
     obj = {
       "image_path": "C:/Path/To/Image",
-      "sub_image_dir": "C:/Path/To/Sub-Images"
+      "sub_image_dir": "C:/Path/To/Sub-Images",
+      "sub_image_size": 32,
+      "image_size_multiplier": 4
     }
     json.dump(obj, f)
   exitWithEnter()
@@ -40,13 +42,38 @@ with open("settings.json", "r") as f:
   elif not os.path.isdir(mosaic_dir):
     print("Sub-image path {} does not point to a directory!".format(mosaic_dir))
     exitWithEnter()
+  elif not settings.get("sub_image_size"):
+    print("Key 'sub_image_size' not set in settings.json!")
+    exitWithEnter()
+  elif not settings.get("image_size_multiplier"):
+    print("Key 'image_size_multiplier' not set in settings.json")
+    exitWithEnter()
+  
+  try:
+    MOS_SIZE_X = int(settings.get("sub_image_size"))
+  except:
+    print("'sub_image_size' in settings.json has to be an integer!")
+    exitWithEnter()
+  
+  try:
+    MMOD = int(settings.get("image_size_multiplier"))
+  except:
+    print("'sub_image_size' in settings.json has to be an integer!")
+    exitWithEnter()
+
+  MOS_SIZE_X_SCALED = max(MOS_SIZE_X // MMOD, 1)
+  if MOS_SIZE_X / MMOD < 1:
+    print("Because the 'sub_image_size' is smaller than 'image_size_multiplier' the 'sub_image_size' will be set to {}".format(MMOD))
+
+  if (MOS_SIZE_X / MMOD) % 1 != 0:
+    print("Because the 'sub_image_size' is not divisible by 'image_size_multiplier' the 'sub_image_size' will be set to {}".format(MOS_SIZE_X_SCALED*MMOD))
+  
+  MOS_SIZE_X = MOS_SIZE_X_SCALED
+  MOS_SIZE_Y = MOS_SIZE_X_SCALED
+  
+os.makedirs("./exports", exist_ok=True)
 
 MOSAIC_DIR = settings["sub_image_dir"]
-
-MOS_SIZE_X = 4
-MOS_SIZE_Y = 4
-
-MMOD = 4
 
 files = glob.glob(MOSAIC_DIR + '/**/*.png', recursive=True)
 files_jpg = glob.glob(MOSAIC_DIR + '/**/*.jpg', recursive=True)
@@ -72,10 +99,10 @@ class MosaicCreator():
     self.image = image
     self.filename = filename
 
-
-    if os.path.exists("export_{}.json".format(MOS_SIZE_X*MMOD)):
+    exportdir = os.path.basename(settings["sub_image_dir"])
+    if os.path.exists("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD)):
       print("Found existing export data for current size, loading data...")
-      with open("export_{}.json".format(MOS_SIZE_X*MMOD), "r") as f:
+      with open("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "r") as f:
         objs = json.load(f)
         for obj in objs:
           if type(obj["val"]) == list:
@@ -96,7 +123,7 @@ class MosaicCreator():
         }
         objs.append(obj)
       try:
-        with open("export_{}.json".format(MOS_SIZE_X*MMOD), "w") as f:
+        with open("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "w") as f:
           json.dump(objs, f, indent=2, cls=NumpyArrayEncoder)
         del objs
         self.colorDict = self.runtimeDict
