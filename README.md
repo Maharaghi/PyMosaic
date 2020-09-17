@@ -28,5 +28,5 @@ This will be the dimensions of the small images.
 A lower size will of course make it harder to see.
 
 ### image_size_multiplier
-This is a simply integer that will resize the main image.
+This is simply an integer that will be applied to resize the main image.
 Ex. If the `image_size_multiplier` is 8 and the image size is 1920x1080, the final image will have the dimensions 15360x8640.
