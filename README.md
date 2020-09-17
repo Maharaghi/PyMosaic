@@ -14,7 +14,7 @@ If for some reason the settings.json file isn't created, here is a default file:
 }
 ```
 
-## Keys
+## Settings
 
 ### image_path
 Change this to the path of the image you want to re-create.
@@ -30,3 +30,9 @@ A lower size will of course make it harder to see.
 ### image_size_multiplier
 This is simply an integer that will be applied to resize the main image.
 Ex. If the `image_size_multiplier` is 8 and the image size is 1920x1080, the final image will have the dimensions 15360x8640.
+
+## Running the program
+To run this program simply clone the repository using  
+`git clone https://github.com/Maharaghi/PyMosaic.git`
+and then run it once with `python main.py`.
+After that simply modify the created `settings.json` according to the keys above, and then run `python main.py` again.
