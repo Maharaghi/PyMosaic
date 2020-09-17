@@ -36,3 +36,10 @@ To run this program simply clone the repository using
 `git clone https://github.com/Maharaghi/PyMosaic.git`  
 and then run it once with `python main.py`.  
 After that simply modify the created `settings.json` according to the keys above, and then run `python main.py` again.
+
+## Example
+Original image  
+![Original image](example.jpg)
+
+Mosaic image (sub_image_size is 32 and image_size_multiplier is 16)
+![Mosaic image](example_16_32.png)
