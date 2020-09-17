@@ -33,6 +33,6 @@ Ex. If the `image_size_multiplier` is 8 and the image size is 1920x1080, the fin
 
 ## Running the program
 To run this program simply clone the repository using  
-`git clone https://github.com/Maharaghi/PyMosaic.git`
-and then run it once with `python main.py`.
+`git clone https://github.com/Maharaghi/PyMosaic.git`  
+and then run it once with `python main.py`.  
 After that simply modify the created `settings.json` according to the keys above, and then run `python main.py` again.
