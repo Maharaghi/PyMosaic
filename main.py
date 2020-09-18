@@ -7,6 +7,13 @@ from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = 1000000000
 
+'''
+TODO
+Write a 5-Square algorithm to properly map out a pixel->sub-image conversion.
+Split image into TL, TR, BL, BR, C directions with mean value
+'''
+
+
 def exitWithEnter():
   input("Press enter to quit the program")
   exit(0)
@@ -61,9 +68,9 @@ with open("settings.json", "r") as f:
     print("'sub_image_size' in settings.json has to be an integer!")
     exitWithEnter()
 
-  MOS_SIZE_X_SCALED = max(MOS_SIZE_X // MMOD, 1)
-  if MOS_SIZE_X / MMOD < 1:
-    print("Because the 'sub_image_size' is smaller than 'image_size_multiplier' the 'sub_image_size' will be set to {}".format(MMOD))
+  MOS_SIZE_X_SCALED = max(MOS_SIZE_X // MMOD, 2)
+  if MOS_SIZE_X / MMOD < 2:
+    print("Because the 'sub_image_size' is smaller than twice the size of 'image_size_multiplier' the 'sub_image_size' will be set to {}".format(MMOD))
 
   if (MOS_SIZE_X / MMOD) % 1 != 0:
     print("Because the 'sub_image_size' is not divisible by 'image_size_multiplier' the 'sub_image_size' will be set to {}".format(MOS_SIZE_X_SCALED*MMOD))
@@ -99,31 +106,37 @@ class MosaicCreator():
     self.image = image
     self.filename = filename
 
-    exportdir = os.path.basename(settings["sub_image_dir"])
-    if os.path.exists("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD)):
-      print("Found existing export data for current size, loading data...")
-      with open("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "r") as f:
-        objs = json.load(f)
-        for obj in objs:
-          if type(obj["val"]) == list:
-            self.colorDict[(int(obj["key"][0]), int(obj["key"][1]), int(obj["key"][2]))] = np.reshape(obj["val"], (MOS_SIZE_Y*MMOD, MOS_SIZE_X*MMOD, 3))
-          else:
-            self.colorDict[(int(obj["key"][0]), int(obj["key"][1]), int(obj["key"][2]))] = obj["val"]
+    self.colorDict["TL"] = dict()
+    self.colorDict["TR"] = dict()
+    self.colorDict["BL"] = dict()
+    self.colorDict["TR"] = dict()
+    self.colorDict["C"] = dict()
 
-        del objs
+    exportdir = os.path.basename(settings["sub_image_dir"])
+    if os.path.exists("./exports/EX_{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD)):
+      print("Found existing export data for current size, loading data...")
+      with open("./exports/EX_{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "r") as f:
+        keys = json.load(f)
+        for key in keys.keys():
+          objs = keys[key]
+          for obj in objs:
+            self.colorDict[key][(int(obj["key"][0]), int(obj["key"][1]), int(obj["key"][2]))] = obj["val"]
+
+        del keys
     else:
       print("No existing export data found, mapping sub-images.")
       self.map_mosaic()
       print("Mapping finished! Exporting data...")
       objs = []
       for key in self.colorDict.keys():
-        obj = {
-          "key": list(key),
-          "val": self.colorDict[key]
-        }
-        objs.append(obj)
+        for colour_key in self.colorDict[key]:
+          obj = {
+            "key": list(colour_key),
+            "val": self.colorDict[key]
+          }
+          objs.append(obj)
       try:
-        with open("./exports/{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "w") as f:
+        with open("./exports/EX_{}_export_{}.json".format(exportdir, MOS_SIZE_X*MMOD), "w") as f:
           json.dump(objs, f, indent=2, cls=NumpyArrayEncoder)
         del objs
         self.colorDict = self.runtimeDict
@@ -149,13 +162,29 @@ class MosaicCreator():
         print(f"Could not open image with path {file}")
         continue
 
-      bw, cb, cr = labIm.split()
+      width, height = labIm.size
 
+      for y in range(2):
+        for x in range(2):
+          crop = labIm.crop((x * width//2, y * height//2, x * width//2 + width//2, y * height//2 + height//2))
+          key = "T" if y == 0 else "B"
+          key = key + "L" if x == 0 else "R"
+          
+          bw, cb, cr = crop.split()
+          
+          imColor = self.get_mean_color(bw, cb, cr)
+      
+          self.colorDict[key][imColor] = file
+          self.runtimeDict[key][imColor] = np.asarray(labIm)
+        
+      crop = labIm.crop((x * width//4, y * height//4, x * width//4 + width//2, y * height//4 + height//2))
+      bw, cb, cr = crop.split()
       imColor = self.get_mean_color(bw, cb, cr)
-
-      self.colorDict[imColor] = file
-      self.runtimeDict[imColor] = np.asarray(labIm)
+      self.colorDict["C"][imColor] = file
+      self.runtimeDict["C"][imColor] = np.asarray(labIm)
+      
       self.printProgressBar(idx+1, l, prefix="Mapping images:", suffix="Complete", length=50)
+
 
   def im_to_mosaic(self):
     if not self.image:
@@ -179,60 +208,13 @@ class MosaicCreator():
     for y in range(y_split):
       for x in range(x_split):
         # Split the image into the size of each sub-image
-        bw = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 0]
-        cb = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 1]
-        cr = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 2]
+        ic = self.split_and_mean(x, y, reg_im)
+        if (ic == False):
+          continue
 
-        # Get the mean colour of this part of the image
-        imColor = self.get_mean_color(bw, cb, cr)
-
-        # If we have the sub-image stored for this colour we can simply use that immediately
-        if (self.colorDict.get(imColor) is not None):
-          ic = self.colorDict.get(imColor)
-          if type(ic) == str:
-            try:
-              temp = Image.open(ic)
-              # Resize image, convert to LAB format, and make into numpy array
-              ic = np.asarray(temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr'))
-              temp.close()
-              
-              # Save numpy array to colorDict so we don't have to read image twice
-              self.colorDict[imColor] = ic
-            except:
-              print(f"Could not open image with path {ic}")
-              continue
-          y_c, x_c = np.where(np.all(ic != (-1, -1, -1), axis=-1))
-          imArray[y_c + (y*MOS_SIZE_Y*MMOD), x_c + (x*MOS_SIZE_X*MMOD)] = ic[y_c, x_c]
-
-        # Else try to get the closest colour
-        else:
-          setColour = (0, 0, 0)
-          imColor = np.array(imColor)
-          colours = list(self.colorDict.keys())
-
-          sub_colours = np.array(colours) - imColor
-
-          diffs = np.linalg.norm(sub_colours, axis=-1)
-          index = diffs.argmin()
-          setColour = colours[index]
-
-          ic = self.colorDict.get((setColour[0], setColour[1], setColour[2]))
-          if type(ic) == str:
-            try:
-              temp = Image.open(ic)
-              # Resize image, convert to LAB format, and make into numpy array
-              ic = np.asarray(temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr'))
-              temp.close()
-            except:
-              print(f"Could not open image with path {ic}")
-              continue
-
-          # Add this colour to the dictionary so we don't have to run calculations again for this colour
-          self.colorDict[(imColor[0], imColor[1], imColor[2])] = ic
-
-          y_c, x_c = np.where(np.all(ic != (-1, -1, -1), axis=-1))
-          imArray[y_c + (y*MOS_SIZE_Y*MMOD), x_c + (x*MOS_SIZE_X*MMOD)] = ic[y_c, x_c]
-          self.printProgressBar((x_split * y) + x, l, prefix="Creating image:", suffix="Complete", length=50)
+        y_c, x_c = np.where(np.all(ic != (-1, -1, -1), axis=-1))
+        imArray[y_c + (y*MOS_SIZE_Y*MMOD), x_c + (x*MOS_SIZE_X*MMOD)] = ic[y_c, x_c]
+        self.printProgressBar((x_split * y) + x, l, prefix="Creating image:", suffix="Complete", length=50)
 
     # Finish progress bar
     self.printProgressBar(l, l, prefix="Creating image:", suffix="Complete", length=50)
@@ -240,6 +222,62 @@ class MosaicCreator():
     name = os.path.splitext(self.filename)
     print("Saving image as {}_{}_{}.png".format(name[0], MMOD, MMOD*MOS_SIZE_X))
     Image.fromarray(imArray, mode="YCbCr").convert("RGB").save("{}_{}_{}.png".format(name[0], MMOD, MMOD*MOS_SIZE_X))
+
+  def split_and_mean(self, x, y, reg_im):
+    for ix, key in enumerate(("TL", "TR", "BL", "BR", "C")):
+
+
+      bw = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 0]
+      cb = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 1]
+      cr = reg_im[y * MOS_SIZE_Y:y * MOS_SIZE_Y + MOS_SIZE_Y, x * MOS_SIZE_X:x * MOS_SIZE_X + MOS_SIZE_X, 2]
+
+      # Get the mean colour of this part of the image
+      imColor = self.get_mean_color(bw, cb, cr)
+
+      # If we have the sub-image stored for this colour we can simply use that immediately
+      if (self.colorDict.get(imColor) is not None):
+        ic = self.colorDict.get(imColor)
+        if type(ic) == str:
+          try:
+            temp = Image.open(ic)
+            # Resize image, convert to LAB format, and make into numpy array
+            ic = np.asarray(temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr'))
+            temp.close()
+            
+            # Save numpy array to colorDict so we don't have to read image twice
+            self.colorDict[imColor] = ic
+          except:
+            print(f"Could not open image with path {ic}")
+            return False
+
+          return ic
+      # Else try to get the closest colour
+      else:
+        setColour = (0, 0, 0)
+        imColor = np.array(imColor)
+        colours = list(self.colorDict.keys())
+
+        sub_colours = np.array(colours) - imColor
+
+        diffs = np.linalg.norm(sub_colours, axis=-1)
+        index = diffs.argmin()
+        setColour = colours[index]
+
+        ic = self.colorDict.get((setColour[0], setColour[1], setColour[2]))
+        if type(ic) == str:
+          try:
+            temp = Image.open(ic)
+            # Resize image, convert to LAB format, and make into numpy array
+            ic = np.asarray(temp.resize((MOS_SIZE_X * MMOD, MOS_SIZE_Y * MMOD), resample=Image.ANTIALIAS).convert('YCbCr'))
+            temp.close()
+          except:
+            print(f"Could not open image with path {ic}")
+            return False
+
+        # Add this colour to the dictionary so we don't have to run calculations again for this colour
+        self.colorDict[(imColor[0], imColor[1], imColor[2])] = ic
+
+        return ic
 
   # Return the median colour as an int tuple
   def get_mean_color(self, bw, cb, cr):
