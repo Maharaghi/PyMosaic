@@ -7,12 +7,6 @@ from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = 1000000000
 
-'''
-TODO
-Write a 5-Square algorithm to properly map out a pixel->sub-image conversion.
-Split image into TL, TR, BL, BR, C directions with mean value
-'''
-
 
 def exitWithEnter():
   input("Press enter to quit the program")
